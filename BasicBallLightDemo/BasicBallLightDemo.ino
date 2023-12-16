@@ -8,23 +8,19 @@
 #define LED_PIN 5
 
 Adafruit_NeoPixel pixels(NUM_LEDS, LED_PIN);
-BallLight lights[NUM_LEDS];
+BallLight balls[NUM_LEDS];
+BallLightSettings ballSettings(600, 2000, 30, 50);
 
 void setup() 
 {
-  for (int i = 0; i < NUM_LEDS; i++) {
-    lights[i] = BallLight(600, 2000, 30, 50);
-  }
-
   pixels.begin();
 }
 
 void loop() 
 {  
   unsigned long t = millis();
-  for (int i = 0; i < NUM_LEDS; i++) {  
-    lights[i].updateForTime(t);
-    RGBColor col = lights[i].color();
+  for (uint16_t i = 0; i < NUM_LEDS; i++) {    
+    RGBColor col = balls[i].updateForTime(t, ballSettings);
     pixels.setPixelColor(i, pixels.Color(col.r, col.g, col.b));
   }
   pixels.show();

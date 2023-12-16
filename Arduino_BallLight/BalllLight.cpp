@@ -11,7 +11,7 @@ static uint8_t lerp(uint8_t a, uint8_t b, uint8_t v)
 }
 
 RGBColor
-RGBColor::blend(RGBColor withColor, uint8_t alpha) const 
+RGBColor::blend(const RGBColor& withColor, uint8_t alpha) const
 {
   RGBColor ret(0,0,0);
   ret.r = lerp(this->r, withColor.r, alpha);
@@ -55,25 +55,21 @@ static int32_t randomizedDuration(unsigned long dur, uint8_t variance)
   return dur + offset;
 }
 
-static RGBColor applyRandomLuminance(const RGBColor& color, uint8_t minPercent)
+static uint8_t getRandomLuminanceForColorIdx(uint8_t colorIdx, uint8_t minPercent)
 {
-  if (minPercent >= 100) {
+    if (colorIdx == kWhiteIdx) {
+        return 100;
+    }
+    return random(minPercent, 100);
+}
+
+static RGBColor applyLuminancePercentage(const RGBColor& color, uint8_t percentage)
+{
+  if (percentage >= 100) {
     return color;
   }
 
-  uint8_t p = random(minPercent, 100);
-  /*
-  
-  uint16_t r = color.r;
-  uint16_t g = color.g;
-  uint16_t b = color.b;
-  r = (r * p) / 100;
-  g = (g * p) / 100;
-  b = (b * p) / 100;
-  return RGBColor(r,g,b);
-  */
-
-  float pp = (p / 100.f);
+  float pp = (percentage / 100.f);
   float lr = color.r * (1.f - (pp * 0.299f));
   float lg = color.g * (1.f - (pp * 0.587f));
   float lb = color.b * (1.f - (pp * 0.114f));
@@ -81,14 +77,14 @@ static RGBColor applyRandomLuminance(const RGBColor& color, uint8_t minPercent)
   return RGBColor(lr,lg,lb);
 }
 
-BallLight::BallLight(unsigned long animation_dur, unsigned long anim_hold, uint8_t anim_variance, uint8_t hold_variance)
-: m_startColor(0,0,0)
-, m_endColor(0,0,0)
-, m_anim_dur_ms(animation_dur)
-, m_anim_hold_ms(anim_hold)
-, m_dur_variance_percentage(min(anim_variance, 100))
-, m_hold_variance_percentage(min(hold_variance, 100))
-, m_animStart_ms(0)
+static RGBColor colorForIndexAndLumaPercentage(uint8_t index, uint8_t percentage)
+{
+    const RGBColor& col = default_colors[index];
+    return applyLuminancePercentage(col, percentage);
+}
+
+BallLight::BallLight()
+: m_animStart_ms(0)
 , m_animEnd_ms(0)
 {
 
@@ -96,54 +92,72 @@ BallLight::BallLight(unsigned long animation_dur, unsigned long anim_hold, uint8
   do {
     m_endColorIdx = randomBallColorIndex();
   } while (m_startColorIdx == m_endColorIdx);
-  m_startColor = default_colors[m_startColorIdx];
-  m_endColor = default_colors[m_endColorIdx];
+
+    
+    m_startColorLuminance = getRandomLuminanceForColorIdx(m_startColorIdx, 25);
+    m_endColorLuminance = getRandomLuminanceForColorIdx(m_endColorIdx, 25);
 }
 
-void BallLight::updateForTime(unsigned long t) 
+RGBColor BallLight::updateForTime(unsigned long t, const BallLightSettings& set)
 {
             
     Milliseconds offset = 0;
-
-    const Milliseconds anim_hold = randomizedDuration(m_anim_hold_ms, m_hold_variance_percentage);
-    const Milliseconds anim_dur = randomizedDuration(m_anim_dur_ms, m_dur_variance_percentage);
+    const Milliseconds anim_dur = randomizedDuration(set.anim_dur_ms, set.dur_variance_percentage);
 
     if (m_animStart_ms == 0 || m_animEnd_ms == 0 || m_animStart_ms >= m_animEnd_ms) {
         m_animStart_ms = t;
         m_animEnd_ms = t + anim_dur;        
     }
     
+    const RGBColor startColor = colorForIndexAndLumaPercentage(m_startColorIdx, m_startColorLuminance);
+    const RGBColor endColor = colorForIndexAndLumaPercentage(m_endColorIdx, m_endColorLuminance);
+    
+    RGBColor currColor(0,0,0);
+    
     if (t <= m_animStart_ms) {
+        // reset to start color
         m_animStart_ms = t;
         m_animEnd_ms = t + anim_dur;
-        m_currColor = m_startColor;
+        
+        currColor = startColor;
         
     } else if (t >= m_animEnd_ms) {
         
-        m_currColor = m_endColor;
+        // reset to end color
+        currColor = endColor;
         
         if (m_startColorIdx == m_endColorIdx) {
-            m_endColorIdx = randomBallColorIndex();
-            while (m_startColorIdx == m_endColorIdx) {
+            // change to something new
+            do {
                 m_endColorIdx = randomBallColorIndex();
-            }
-            m_endColor = default_colors[m_endColorIdx];
-            if (m_endColorIdx != kWhiteIdx) {
-              m_endColor = applyRandomLuminance(m_endColor, 25);
-            }
+            } while (m_startColorIdx == m_endColorIdx);
+
+            m_endColorLuminance = getRandomLuminanceForColorIdx(m_endColorIdx, 25);
+            
             m_animStart_ms = t;
             m_animEnd_ms = t + anim_dur;
         } else {
-            m_startColor = m_endColor;
+            //
+            const Milliseconds anim_hold = randomizedDuration(set.anim_hold_ms, set.hold_variance_percentage);
             m_startColorIdx = m_endColorIdx;
             m_animStart_ms = t;
             m_animEnd_ms = t + anim_hold;
         }
-
         
     } else {
 
         Milliseconds inter = ((t - m_animStart_ms) * 255) / (m_animEnd_ms - m_animStart_ms);
-        m_currColor = m_endColor.blend(m_startColor, inter);
+        currColor = endColor.blend(startColor, inter);
     }
+    
+    return currColor;
+}
+
+BallLightSettings::BallLightSettings(unsigned long animation_dur, unsigned long anim_hold,
+                                     uint8_t anim_variance, uint8_t hold_variance)
+{
+    this->anim_dur_ms = animation_dur;
+    this->anim_hold_ms = anim_hold;
+    this->dur_variance_percentage = min(anim_variance, 100);
+    this->hold_variance_percentage = min(hold_variance, 100);
 }

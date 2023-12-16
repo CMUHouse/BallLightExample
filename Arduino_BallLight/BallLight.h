@@ -26,7 +26,7 @@ public:
     return (r == rhs.r) && (g == rhs.g) && (b == rhs.b);
   }
   
-  RGBColor blend(RGBColor withColor, uint8_t alpha) const;
+  RGBColor blend(const RGBColor& withColor, uint8_t alpha) const;
 
 };
 
@@ -41,38 +41,38 @@ public:
 #define TEAL  RGBColor(0,0,128)
 #define INDIGO RGBColor(255,0,127)
 
+class BallLightSettings
+{
+public:
+    
+    BallLightSettings(unsigned long animation_dur, unsigned long anim_hold,
+                 uint8_t anim_variance, uint8_t hold_variance);
+
+    unsigned long anim_dur_ms = 0;
+    unsigned long anim_hold_ms = 0;
+    uint8_t dur_variance_percentage = 0;
+    uint8_t hold_variance_percentage = 0;
+    
+};
+
 class BallLight {
     
   public:
-
-    BallLight() {}
-
-    BallLight(unsigned long animation_dur, unsigned long anim_hold, uint8_t anim_variance, uint8_t hold_variance);
-
-    void updateForTime(unsigned long t);
-
-    const RGBColor& color() const { return m_currColor; }
     
+    BallLight();
+    RGBColor updateForTime(unsigned long t, const BallLightSettings& set);
+
   private:
 
     typedef unsigned long Milliseconds;
-
-    Milliseconds m_anim_dur_ms = 0;
-    Milliseconds m_anim_hold_ms = 0;
     
     Milliseconds m_animStart_ms = 0;
     Milliseconds m_animEnd_ms = 0;
 
-    uint8_t m_dur_variance_percentage = 0;
-    uint8_t m_hold_variance_percentage = 0;
-
     uint8_t m_startColorIdx = 0;
     uint8_t m_endColorIdx = 0;
-
-    RGBColor m_startColor = WHITE;
-    RGBColor m_endColor = WHITE;
-    RGBColor m_currColor = RGBColor(0,0,0);    
-    
+    uint8_t m_startColorLuminance = 0;
+    uint8_t m_endColorLuminance = 0;
 };
 
 #endif // BALL_LIGHT_H
